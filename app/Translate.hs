@@ -27,6 +27,13 @@ genExpr (ESnd e) = do
 
 genExpr e = error("genExpr: not implemented for"++show e)
 
+genStmtWithComment :: Stmt -> TM [YulStatement]
+genStmtWithComment (SComment c) = pure [YulComment c]
+genStmtWithComment s = do
+    let comment = YulComment(show s)
+    body <- genStmt s
+    pure (comment : body)
+
 genStmt :: Stmt -> TM [YulStatement]
 genStmt (SAssembly stmts) = pure stmts
 genStmt (SAlloc name typ) = coreAlloc name typ
@@ -66,11 +73,13 @@ coreAssign lhs rhs = do
     load (LocInt n) = YulLiteral (YulNumber (fromIntegral n))
     load (LocStack i) = YulIdentifier (stkLoc i)
     load loc = error("cannot load "++show loc)
-    copy (LocStack i) rhs@(LocInt _) = [YulAssign [stkLoc i] (load rhs)]
-    copy (LocStack i) rhs@(LocStack _) = [YulAssign [stkLoc i] (load rhs)]
+    copy (LocStack i) r@(LocInt _) = [YulAssign [stkLoc i] (load r)]
+    copy (LocStack i) r@(LocStack _) = [YulAssign [stkLoc i] (load r)]
     copy (LocPair l1 l2) (LocPair r1 r2) = copy l1 r1 ++ copy l2 r2
     copy _ _ = error "copy: type mismatch"
 
-genStmts :: [Stmt] -> TM Yul 
-genStmts stmts = Yul . concat <$> mapM genStmt stmts
+genStmts :: [Stmt] -> TM Yul
+genStmts stmts = Yul . concat <$> mapM genStmtWithComment stmts
 
+translateCore :: Core -> TM Yul
+translateCore (Core stmts) = genStmts stmts

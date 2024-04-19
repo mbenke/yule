@@ -10,18 +10,26 @@ import Yul
 
 main :: IO ()
 main = main3
-
 main3 :: IO ()
 main3 = do
-    generatedYul <- runTM (genStmts core2)
+    generatedYul <- runTM (translateCore core2)
     let fooFun = wrapInSolFunction "main" generatedYul
     let doc = wrapInContract "Foo" "main()" fooFun
     putStrLn (render doc) 
   
-    
+main5 :: IO ()
+main5 = putStrLn (render (pretty core2)) 
 
-core2 ::[Stmt]
-core2 = [ 
+{-
+main6 = do
+    putStrLn "/* Core:"
+    putStrLn (render (nest 2 (pretty core2)))
+    putStrLn "*/"
+    main3
+-}
+
+core2 :: Core
+core2 = Core [ 
     SAlloc a TInt, 
     SAlloc c TInt,
     SAlloc b (TPair TInt TInt), 

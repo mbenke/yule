@@ -29,6 +29,7 @@ data YulStatement
   | YulBreak
   | YulContinue
   | YulLeave
+  | YulComment String
 
 data YulExpression
   = YulCall String [YulExpression]
@@ -81,6 +82,7 @@ instance Pretty YulStatement where
   pretty YulBreak = text "break"
   pretty YulContinue = text "continue"
   pretty YulLeave = text "leave"
+  pretty (YulComment c) = text "/*" <+> text c <+> text "*/"
 
 instance Pretty YulExpression where
   pretty (YulCall name args) = text name >< parens (hsep (punctuate comma (map pretty args)))

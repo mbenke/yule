@@ -2,3 +2,4 @@
 *.bak
 dist-newstyle
 out
+cache
