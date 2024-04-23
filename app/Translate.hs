@@ -38,12 +38,21 @@ genStmt :: Stmt -> TM [YulStatement]
 genStmt (SAssembly stmts) = pure stmts
 genStmt (SAlloc name typ) = coreAlloc name typ
 genStmt (SAssign name expr) = coreAssign name expr
+{-
 genStmt (SReturn name) = do
     loc <- lookupVar name
     case loc of
         LocStack i -> pure [YulAssign ["_result"] (YulIdentifier (stkLoc i))]
         LocInt n -> pure [YulAssign ["_result"] (YulLiteral (YulNumber (fromIntegral n)))]
         _ -> error "SReturn: type mismatch"
+-}
+genStmt (SReturn expr) = do
+    (stmts, loc) <- genExpr expr
+    case loc of
+        LocStack i -> pure (stmts ++ [YulAssign ["_result"] (YulIdentifier (stkLoc i))])
+        LocInt n -> pure (stmts ++ [YulAssign ["_result"] (YulLiteral (YulNumber (fromIntegral n)))])
+        _ -> error "SReturn: type mismatch"
+genStmt (SBlock stmts) = yulStmts <$> genStmts stmts
 genStmt e = error $ "genStmt: " ++ show e
 
 coreAlloc :: Name -> Type -> TM [YulStatement]

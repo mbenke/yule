@@ -15,10 +15,10 @@ main3 = do
     generatedYul <- runTM (translateCore core2)
     let fooFun = wrapInSolFunction "main" generatedYul
     let doc = wrapInContract "Foo" "main()" fooFun
-    putStrLn (render doc) 
-  
+    putStrLn (render doc)
+
 main5 :: IO ()
-main5 = putStrLn (render (pretty core2)) 
+main5 = putStrLn (render (pretty core2))
 
 {-
 main6 = do
@@ -28,17 +28,32 @@ main6 = do
     main3
 -}
 
+main7 :: IO ()
+main7 = do
+    putStrLn "/* Core:"
+    putStrLn (render (nest 2 (pretty core3)))
+    putStrLn "*/"
+
+core3 :: Core
+core3 = Core
+  [ SAlloc "s" TInt
+  , SAssign s (EInl (EBool False))
+  , SAssign s (EInr (EInt 42))
+  , SCase s [Alt "b" (SReturn (EInt 17))
+            ,Alt "i" (SReturn (EVar "i"))]
+  ] where s = EVar "s"
+
 core2 :: Core
-core2 = Core [ 
-    SAlloc a TInt, 
+core2 = Core [
+    SAlloc a TInt,
     SAlloc c TInt,
-    SAlloc b (TPair TInt TInt), 
+    SAlloc b (TPair TInt TInt),
     SAV a (EInt 42),
     SAV b (EPair va (EInt 0)),
     SAssign (EFst vb) (EInt 1337),
     SAV c (EFst vb),
-    SReturn c 
-    ] where 
+    SReturn vc
+    ] where
         (a,b,c) = ("a","b","c")
         (va, vb, vc) = (EVar a, EVar b, EVar c)
 
@@ -63,5 +78,5 @@ yfun1 = YulFun "f" [] (YReturns["_funresult"])
     ]
 
 main1 = putStrLn (render (pretty yul1))
-main2 = putStrLn (render (pretty yul2))    
+main2 = putStrLn (render (pretty yul2))
 -}
