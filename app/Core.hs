@@ -54,7 +54,7 @@ instance Pretty Expr where
 
 instance Pretty Stmt where
     pretty (SAssign lhs rhs) = pretty lhs <+> text ":=" <+> pretty rhs
-    pretty (SAlloc x t) = text "let" <+> text x <+> text ":=" <+> pretty t
+    pretty (SAlloc x t) = text "let" <+> text x <+> text ":" <+> pretty t
     pretty (SExpr e) = pretty e
     pretty (SAssembly stmts) = vcat (map pretty stmts)
     pretty (SReturn x) = text "return" <+> text x
