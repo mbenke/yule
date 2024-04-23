@@ -9,7 +9,7 @@ import Yul
 -- import YulParser
 
 main :: IO ()
-main = main3
+main = main7
 main3 :: IO ()
 main3 = do
     generatedYul <- runTM (translateCore core2)
@@ -33,14 +33,19 @@ main7 = do
     putStrLn "/* Core:"
     putStrLn (render (nest 2 (pretty core3)))
     putStrLn "*/"
+    generatedYul <- runTM (translateCore core3)
+    let fooFun = wrapInSolFunction "main" generatedYul
+    let doc = wrapInContract "Foo" "main()" fooFun
+    putStrLn (render doc)
 
 core3 :: Core
 core3 = Core
-  [ SAlloc "s" TInt
-  , SAssign s (EInl (EBool False))
-  , SAssign s (EInr (EInt 42))
-  , SCase s [Alt "b" (SReturn (EInt 17))
-            ,Alt "i" (SReturn (EVar "i"))]
+  [ SAlloc "s" (TSum TBool TInt)
+  , SAssign s (EInl TBool TInt (EBool False))
+  , SAssign s (EInr TBool TInt (EInt 42))
+  , SReturn (EInt 0)
+  -- , SCase s [Alt "b" (SReturn (EInt 17))
+  --          ,Alt "i" (SReturn (EVar "i"))]
   ] where s = EVar "s"
 
 core2 :: Core

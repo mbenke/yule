@@ -7,10 +7,12 @@ Location tree with addresses a:
 - location for sum is a location for tag and locations for components
 -}
 data LocTree a 
-    = LocInt Int
-    | LocStack Int
-    | LocPair (LocTree a) (LocTree a)
-    | LocSum a (LocTree a) (LocTree a)
+    = LocInt Int      -- int literal
+    | LocBool Bool    -- bool literal
+    | LocStack a      -- stack location
+    | LocPair (LocTree a) (LocTree a)  -- location for a pair
+    | LocSum (LocTree a) (LocTree a) (LocTree a) -- location for a sum: tag and components
+    | LocUndefined  -- FIXME: rethink, add handling
     deriving (Show)
 
 type Location = LocTree Int

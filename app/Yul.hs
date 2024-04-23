@@ -70,7 +70,7 @@ instance Pretty YulStatement where
   pretty (YulIf cond stmts) = text "if" <+> parens (pretty cond) <+> pretty (YulBlock stmts)
   pretty (YulSwitch expr cases def) =
     text "switch"
-      <+> parens (pretty expr)
+      <+> (pretty expr)
       <+> lbrace
       $$ nest 4 (vcat (map (\(lit, stmts) -> text "case" <+> pretty lit <+> colon <+> pretty (YulBlock stmts)) cases))
       $$ maybe empty (\stmts -> text "default" <+> colon <+> pretty (YulBlock stmts)) def
