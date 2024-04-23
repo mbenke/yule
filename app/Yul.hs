@@ -2,7 +2,7 @@ module Yul where
 
 import Pretty
 
-newtype Yul = Yul [YulStatement]
+newtype Yul = Yul { yulStmts :: [YulStatement] }
 instance Show Yul where show = render . pretty
 instance Show YulStatement where show = render . pretty
 instance Show YulExpression where show = render . pretty
