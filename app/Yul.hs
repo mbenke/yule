@@ -71,10 +71,8 @@ instance Pretty YulStatement where
   pretty (YulSwitch expr cases def) =
     text "switch"
       <+> (pretty expr)
-      <+> lbrace
-      $$ nest 4 (vcat (map (\(lit, stmts) -> text "case" <+> pretty lit <+> colon <+> pretty (YulBlock stmts)) cases))
-      $$ maybe empty (\stmts -> text "default" <+> colon <+> pretty (YulBlock stmts)) def
-      $$ rbrace
+      $$ nest 4 (vcat (map (\(lit, stmts) -> text "case" <+> pretty lit <+> pretty (YulBlock stmts)) cases))
+      $$ maybe empty (\stmts -> text "default" <+> pretty (YulBlock stmts)) def
   pretty (YulForLoop pre cond post stmts) = 
     text "for" <+> braces (hsep  (map pretty pre))
                <+> pretty cond  

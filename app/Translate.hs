@@ -64,7 +64,7 @@ genStmt (SCase e alts) = do
     (stmts, loc) <- genExpr e
     case loc of
         LocSum loctag l r -> do
-            yulAlts <- genAlts alts
+            yulAlts <- genAlts l r alts
             pure (stmts ++ [YulSwitch (yultag loctag) yulAlts Nothing]) where
                 yultag (LocStack i) = YulIdentifier (stkLoc i)
                 yultag (LocBool b) = YulLiteral (if b then YulTrue else YulFalse)
@@ -72,8 +72,17 @@ genStmt (SCase e alts) = do
         _ -> error "SCase: type mismatch"
 genStmt e = error $ "genStmt unimplemented for: " ++ show e
 
-genAlts :: [Alt] -> TM [(YulLiteral, [YulStatement])]
-genAlts alts = pure [] -- FIXME: implement
+genAlts :: Location -> Location -> [Alt] -> TM [(YulLiteral, [YulStatement])]
+genAlts locL locR [(Alt lname lstmt), (Alt rname rstmt)] = do
+    yulLStmts <- withName lname locL lstmt
+    yulRStmts <- withName rname locR rstmt
+    pure [(YulFalse, yulLStmts), (YulTrue, yulRStmts)]
+    where
+        withName name loc stmt = withLocalEnv do
+            insertVar name loc
+            bstmts <- genStmt stmt
+            pure bstmts
+
 
 coreAlloc :: Name -> Type -> TM [YulStatement]
 coreAlloc name typ = do

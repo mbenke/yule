@@ -44,8 +44,8 @@ core3 = Core
   , SAssign s (EInl TBool TInt (EBool False))
   , SAssign s (EInr TBool TInt (EInt 42))
   , SReturn (EInt 0)
-  -- , SCase s [Alt "b" (SReturn (EInt 17))
-  --          ,Alt "i" (SReturn (EVar "i"))]
+  , SCase s [Alt "b" (SReturn (EInt 17))
+            ,Alt "i" (SReturn (EVar "i"))]
   ] where s = EVar "s"
 
 core2 :: Core
