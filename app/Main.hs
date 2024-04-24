@@ -6,7 +6,7 @@ import Pretty
 import TM
 import Translate
 import Yul
--- import YulParser
+import YulParser
 
 main :: IO ()
 main = main7
@@ -27,6 +27,11 @@ main6 = do
     putStrLn "*/"
     main3
 -}
+main8 :: IO ()
+main8 = do
+    src <- readFile "foo.yul"
+    let yul = parseYul src
+    putStrLn (render (pretty yul))
 
 main7 :: IO ()
 main7 = do
