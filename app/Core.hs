@@ -19,8 +19,8 @@ data Expr
     | EPair Expr Expr
     | EFst Expr
     | ESnd Expr
-    | EInl Type Type Expr  -- inl<l,r>(e)
-    | EInr Type Type Expr  -- inr<l,r>(e)
+    | EInl Expr
+    | EInr Expr
     | ECall Name [Expr]
 
 instance Show Expr where
@@ -58,8 +58,8 @@ instance Pretty Expr where
     pretty (EPair e1 e2) = parens (pretty e1 >< comma <+> pretty e2)
     pretty (EFst e) = pretty e  >< text ".fst"
     pretty (ESnd e) = pretty e  >< text ".snd"
-    pretty (EInl l r e) = text "inl" >< brackets(pretty l >< comma >< pretty r) >< parens (pretty e)
-    pretty (EInr l r e) = text "inr" >< brackets(pretty l >< comma >< pretty r) >< parens (pretty e)
+    pretty (EInl e) = text "inl" >< parens (pretty e)
+    pretty (EInr e) = text "inr" >< parens (pretty e)
     pretty (ECall f es) = text f >< parens(hsep (map pretty es))
 
 instance Pretty Stmt where

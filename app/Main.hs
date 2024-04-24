@@ -41,8 +41,8 @@ main7 = do
 core3 :: Core
 core3 = Core
   [ SAlloc "s" (TSum TBool TInt)
-  , SAssign s (EInl TBool TInt (EBool False))
-  , SAssign s (EInr TBool TInt (EInt 42))
+  , SAssign s (EInl (EBool False))
+  , SAssign s (EInr(EInt 42))
   , SReturn (EInt 0)
   , SCase s [Alt "b" (SReturn (EInt 17))
             ,Alt "i" (SReturn (EVar "i"))]
