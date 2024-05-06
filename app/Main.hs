@@ -2,6 +2,7 @@ module Main where
 import Prelude hiding ((<>))
 
 import Core
+import CoreParser
 import Pretty
 import TM
 import Translate
@@ -9,7 +10,20 @@ import Yul
 import YulParser
 
 main :: IO ()
-main = main7
+main = main9
+
+main9 :: IO ()
+main9 = do
+    src <- readFile "examples/01pairs.core"
+    let core = parseCore src
+    putStrLn "/* Core:"
+    putStrLn (render (nest 2 (pretty core)))
+    putStrLn "*/"
+    generatedYul <- runTM (translateCore core)
+    let fooFun = wrapInSolFunction "main" generatedYul
+    let doc = wrapInContract "Foo" "main()" fooFun
+    putStrLn (render doc)
+
 main3 :: IO ()
 main3 = do
     generatedYul <- runTM (translateCore core2)
