@@ -75,6 +75,7 @@ executable yule
                       mtl ^>= 2.2.2,
                       megaparsec ^>= 9.6,
                       parser-combinators ^>= 1.3,
+                      optparse-applicative ^>= 0.18,
 
     -- Directories containing source files.
     hs-source-dirs:   app
