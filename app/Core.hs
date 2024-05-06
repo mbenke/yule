@@ -10,6 +10,7 @@ data Type
     | TPair Type Type
     | TSum Type Type
     | TFun [Type] Type
+    | TUnit
     deriving (Show)
 
 data Expr
@@ -22,7 +23,7 @@ data Expr
     | EInl Expr
     | EInr Expr
     | ECall Name [Expr]
-
+    | EUnit
 instance Show Expr where
     show = render . pretty
 
@@ -47,6 +48,7 @@ data Core = Core [Stmt]
 instance Pretty Type where
     pretty TInt = text "int"
     pretty TBool = text "bool"
+    pretty TUnit = text "unit"
     pretty (TPair t1 t2) = parens (pretty t1 <+> text "*" <+> pretty t2)
     pretty (TSum t1 t2) = parens (pretty t1 <+> text "+" <+> pretty t2)
     pretty (TFun ts t) = parens (hsep (map pretty ts) <+> text "->" <+> pretty t)
@@ -54,6 +56,7 @@ instance Pretty Type where
 instance Pretty Expr where
     pretty (EInt i) = text (show i)
     pretty (EBool b) = text (show b)
+    pretty EUnit = text "()"
     pretty (EVar x) = text x
     pretty (EPair e1 e2) = parens (pretty e1 >< comma <+> pretty e2)
     pretty (EFst e) = pretty e  >< text ".fst"
