@@ -5,11 +5,13 @@ import TM
 import Translate
 import Yul
 import Options.Applicative
+import Control.Monad(when)
 
 data Options = Options
     { input :: FilePath
     , contract :: String
     , output :: FilePath
+    , verbose :: Bool
     } deriving Show
 
 optionsParser :: Parser Options
@@ -29,18 +31,23 @@ optionsParser = Options
         <> metavar "FILE"
         <> help "Output file" 
         <> value "Output.sol")
-    
+    <*> switch
+        ( long "verbose"
+        <> short 'v'
+        <> help "Verbosity level"
+        <> showDefault
+        )
 
 main :: IO ()
 main = do
     options <- parseOptions
+    -- print options
     src <- readFile (input options)
     let core = parseCore src
-    {-
-    putStrLn "/* Core:"
-    putStrLn (render (nest 2 (pretty core)))
-    putStrLn "*/"
-    -}
+    when (verbose options) $ do
+        putStrLn "/* Core:"
+        putStrLn (render (nest 2 (pretty core)))
+        putStrLn "*/"
     generatedYul <- runTM (translateCore core)
     let fooFun = wrapInSolFunction "main" generatedYul
     let doc = wrapInContract (contract options) "main()" fooFun
