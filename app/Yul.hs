@@ -42,6 +42,12 @@ data YulLiteral
   | YulTrue
   | YulFalse
 
+yulInt :: Integral i => i -> YulExpression
+yulInt = YulLiteral . YulNumber . fromIntegral
+
+yulBool :: Bool -> YulExpression
+yulBool True = YulLiteral YulTrue
+yulBool False = YulLiteral YulFalse
 
 instance Pretty Yul where
   pretty (Yul stmts) = vcat (map pretty stmts)

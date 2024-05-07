@@ -34,31 +34,25 @@ genExpr (EInr e) = do
 genExpr (ECall name args) = do
     (argCodes, argLocs) <- unzip <$> mapM genExpr args
     let argsCode = concat argCodes
-    let yulArgs = flattenArgs argLocs
+    let yulArgs = concatMap flattenRhs argLocs
     funInfo <- lookupFun name
-    (resultCode, resultLoc) <- allocResult (fun_result funInfo)
+    (resultCode, resultLoc) <- coreAlloc (fun_result funInfo)
     let callExpr = YulCall name yulArgs
-    let callCode = [YulAssign (flattenRes resultLoc) callExpr]
+    let callCode = [YulAssign (flattenLhs resultLoc) callExpr]
     pure (argsCode++resultCode++callCode, resultLoc)
-    where
-        flattenArgs :: [Location] ->  [YulExpression]
-        flattenArgs = concatMap flattenArg
-        flattenArg :: Location -> [YulExpression]
-        flattenArg (LocInt n) = [YulLiteral (YulNumber (fromIntegral n))]
-        flattenArg (LocBool b) = [YulLiteral (if b then YulTrue else YulFalse)]
-        flattenArg (LocStack i) = [YulIdentifier (stkLoc i)]
-        flattenArg (LocPair l r) = flattenArg l ++ flattenArg r
-        flattenArg l = error("flattenArg: not implemented for "++show l)
-        flattenRes :: Location -> [Name]
-        flattenRes (LocStack i) = [stkLoc i]
-        flattenRes (LocPair l r) = flattenRes l ++ flattenRes r
-        flattenRes l = error("flattenRes: not implemented for "++show l)
-        allocResult :: Type -> TM ([YulStatement], Location)
-        allocResult TInt = do
-            n <- freshId
-            let loc = LocStack n
-            pure ([YulAlloc (stkLoc n)], loc)
 genExpr e = error("genExpr: not implemented for "++show e)
+
+flattenRhs :: Location -> [YulExpression]
+flattenRhs (LocInt n) = [yulInt n]
+flattenRhs (LocBool b) = [yulBool b]
+flattenRhs (LocStack i) = [YulIdentifier (stkLoc i)]
+flattenRhs (LocPair l r) = flattenRhs l ++ flattenRhs r
+flattenRhs l = error("flattenRhs: not implemented for "++show l)
+
+flattenLhs :: Location -> [Name]
+flattenLhs (LocStack i) = [stkLoc i]
+flattenLhs (LocPair l r) = flattenLhs l ++ flattenLhs r
+flattenLhs l = error("flattenLhs: not implemented for "++show l)
 
 genStmtWithComment :: Stmt -> TM [YulStatement]
 genStmtWithComment (SComment c) = pure [YulComment c]
@@ -69,7 +63,7 @@ genStmtWithComment s = do
 
 genStmt :: Stmt -> TM [YulStatement]
 genStmt (SAssembly stmts) = pure stmts
-genStmt (SAlloc name typ) = coreAlloc name typ
+genStmt (SAlloc name typ) = allocVar name typ
 genStmt (SAssign name expr) = coreAssign name expr
 
 genStmt (SReturn expr) = do
@@ -86,8 +80,9 @@ genStmt (SCase e alts) = do
             yulAlts <- genAlts l r alts
             pure (stmts ++ [YulSwitch (yultag loctag) yulAlts Nothing]) where
                 yultag (LocStack i) = YulIdentifier (stkLoc i)
-                yultag (LocBool b) = YulLiteral (if b then YulTrue else YulFalse)
-                yultag (LocInt n) = YulLiteral (YulNumber (fromIntegral n))
+                yultag (LocBool b) = yulBool b
+                yultag (LocInt n) = yulInt n
+                yultag t = error("invalid tag: "++show t)
         _ -> error "SCase: type mismatch"
 
 genStmt (SFunction name args ret stmts) = do
@@ -96,25 +91,20 @@ genStmt (SFunction name args ret stmts) = do
     insertFun name info
     withLocalEnv do
         yulArgs <- placeArgs args
-        yulResult <- placeResult ret
+        yulResult <- place "_result" ret  -- TODO: special handling of unit
         yulBody <- genStmts stmts
         return [YulFun name yulArgs (YReturns yulResult) yulBody]
     where
-        placeArgs :: [Arg] -> TM [YArg]
-        placeArgs = mapM placeArg
-        placeArg :: Arg -> TM YArg
-        placeArg (TArg name TInt) = do
-            n <- freshId
-            let loc = LocStack n
+        placeArgs :: [Arg] -> TM [Name]
+        placeArgs as = concat <$> mapM placeArg as
+        placeArg :: Arg -> TM [Name]
+        placeArg (TArg name typ) = place name typ
+        place :: Name -> Type -> TM [Name]
+        place name typ = do
+            loc <- buildLoc typ
             insertVar name loc
-            return (stkLoc n)
-        placeArg (TArg _ typ) = error("placeArg: not implemented for type" ++ show typ)
-        placeResult :: Type -> TM [YArg]
-        placeResult TInt = do
-            n <- freshId
-            let loc = LocStack n
-            insertVar "_result" loc
-            return [stkLoc n]
+            return (flattenLhs loc)
+
 
 genStmt e = error $ "genStmt unimplemented for: " ++ show e
 
@@ -130,33 +120,51 @@ genAlts locL locR [(Alt lname lstmt), (Alt rname rstmt)] = do
             pure bstmts
 genAlts _ _ _ = error "genAlts: invalid number of alternatives"
 
-coreAlloc :: Name -> Type -> TM [YulStatement]
-coreAlloc name typ = do
-    (stmts, loc) <- alloc typ
+
+allocVar :: Name -> Type -> TM [YulStatement]
+allocVar name typ = do
+    (stmts, loc) <- coreAlloc typ
     insertVar name loc
     return stmts
-    where
-        alloc :: Type -> TM ([YulStatement], Location)
-        alloc TInt = do
-            n <- freshId
-            let loc = LocStack n
-            pure ([YulAlloc (stkLoc n)], loc)
-        alloc TBool = allocBool
-        alloc (TPair t1 t2) = do
-            (stmts1, loc1) <- alloc t1
-            (stmts2, loc2) <- alloc t2
-            pure (stmts1 ++ stmts2, LocPair loc1 loc2)
-        alloc (TSum t1 t2) = do
-            (tagStmts, tagLoc) <- allocBool
-            (stmts1, loc1) <- alloc t1
-            (stmts2, loc2) <- alloc t2
-            pure (tagStmts ++ stmts1 ++ stmts2, LocSum tagLoc loc1 loc2)
-        alloc t = error("cannot allocate "++show t)
-        allocBool :: TM ([YulStatement], Location)
-        allocBool = do
-            n <- freshId
-            let loc = LocStack n
-            pure ([YulAlloc (stkLoc n)], loc)
+
+buildLoc :: Type -> TM Location
+buildLoc TInt = LocStack <$> freshId
+buildLoc TBool = LocStack <$> freshId
+buildLoc (TPair t1 t2) = do
+    l1 <- buildLoc t1
+    l2 <- buildLoc t2
+    return (LocPair l1 l2)
+buildLoc (TSum t1 t2) = do
+    tag <- LocStack <$> freshId
+    l1 <- buildLoc t1
+    l2 <- buildLoc t2
+    return (LocSum tag l1 l2)
+buildLoc TUnit = pure LocUnit
+buildLoc t = error("cannot build location for "++show t)
+
+coreAlloc :: Type -> TM ([YulStatement], Location)
+coreAlloc TInt = do
+    n <- freshId
+    let loc = LocStack n
+    pure ([YulAlloc (stkLoc n)], loc)
+coreAlloc TBool = allocBool
+coreAlloc (TPair t1 t2) = do
+    (stmts1, loc1) <- coreAlloc t1
+    (stmts2, loc2) <- coreAlloc t2
+    pure (stmts1 ++ stmts2, LocPair loc1 loc2)
+coreAlloc (TSum t1 t2) = do
+    (tagStmts, tagLoc) <- allocBool
+    (stmts1, loc1) <- coreAlloc t1
+    (stmts2, loc2) <- coreAlloc t2
+    pure (tagStmts ++ stmts1 ++ stmts2, LocSum tagLoc loc1 loc2)
+coreAlloc TUnit = pure ([], LocUnit)
+coreAlloc t = error("cannot allocate "++show t)
+
+allocBool :: TM ([YulStatement], Location)
+allocBool = do
+    n <- freshId
+    let loc = LocStack n
+    pure ([YulAlloc (stkLoc n)], loc)
 
 
 coreAssign :: Expr -> Expr -> TM [YulStatement]

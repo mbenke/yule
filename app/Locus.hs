@@ -9,6 +9,7 @@ Location tree with addresses a:
 data LocTree a 
     = LocInt Int      -- int literal
     | LocBool Bool    -- bool literal
+    | LocUnit         -- unit literal
     | LocStack a      -- stack location
     | LocPair (LocTree a) (LocTree a)  -- location for a pair
     | LocSum (LocTree a) (LocTree a) (LocTree a) -- location for a sum: tag and components
