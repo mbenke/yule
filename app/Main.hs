@@ -63,14 +63,4 @@ parseOptions = execParser opts
       ( fullDesc
      <> progDesc "Print a greeting for TARGET"
      <> header "hello - a test for optparse-applicative" )
-main9 :: IO ()
-main9 = do
-    src <- readFile "examples/01pairs.core"
-    let core = parseCore src
-    putStrLn "/* Core:"
-    putStrLn (render (nest 2 (pretty core)))
-    putStrLn "*/"
-    generatedYul <- runTM (translateCore core)
-    let fooFun = wrapInSolFunction "main" generatedYul
-    let doc = wrapInContract "Foo" "main()" fooFun
-    putStrLn (render doc)
+
