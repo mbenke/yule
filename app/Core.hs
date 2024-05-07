@@ -66,7 +66,7 @@ instance Pretty Expr where
     pretty (ESnd e) = pretty e  >< text ".snd"
     pretty (EInl e) = text "inl" >< parens (pretty e)
     pretty (EInr e) = text "inr" >< parens (pretty e)
-    pretty (ECall f es) = text f >< parens(hsep (map pretty es))
+    pretty (ECall f es) = text f >< parens(hsep (punctuate comma (map pretty es)))
 
 instance Pretty Stmt where
     pretty (SAssign lhs rhs) = pretty lhs <+> text ":=" <+> pretty rhs

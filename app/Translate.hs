@@ -31,7 +31,34 @@ genExpr (EInl e) = do
 genExpr (EInr e) = do
     (stmts, loc) <- genExpr e
     pure (stmts, LocSum (LocBool True) (LocUndefined) loc) -- FIXME tag
-
+genExpr (ECall name args) = do
+    (argCodes, argLocs) <- unzip <$> mapM genExpr args
+    let argsCode = concat argCodes
+    let yulArgs = flattenArgs argLocs
+    info <- lookupFun name
+    let resultType = fun_result info
+    (resultCode, resultLoc) <- allocResult resultType
+    let callExpr = YulCall name yulArgs
+    let callCode = [YulAssign (flattenRes resultLoc) callExpr]
+    pure (argsCode++resultCode++callCode, resultLoc)
+    where
+        flattenArgs :: [Location] ->  [YulExpression]
+        flattenArgs = concatMap flattenArg
+        flattenArg :: Location -> [YulExpression]
+        flattenArg (LocInt n) = [YulLiteral (YulNumber (fromIntegral n))]
+        flattenArg (LocBool b) = [YulLiteral (if b then YulTrue else YulFalse)]
+        flattenArg (LocStack i) = [YulIdentifier (stkLoc i)]
+        flattenArg (LocPair l r) = flattenArg l ++ flattenArg r
+        flattenArg l = error("flattenArg: not implemented for "++show l)
+        flattenRes :: Location -> [Name]
+        flattenRes (LocStack i) = [stkLoc i]
+        flattenRes (LocPair l r) = flattenRes l ++ flattenRes r
+        flattenRes l = error("flattenRes: not implemented for "++show l)
+        allocResult :: Type -> TM ([YulStatement], Location)
+        allocResult TInt = do
+            n <- freshId
+            let loc = LocStack n
+            pure ([YulAlloc (stkLoc n)], loc)
 genExpr e = error("genExpr: not implemented for "++show e)
 
 genStmtWithComment :: Stmt -> TM [YulStatement]
@@ -53,13 +80,19 @@ genStmt (SReturn name) = do
         LocInt n -> pure [YulAssign ["_result"] (YulLiteral (YulNumber (fromIntegral n)))]
         _ -> error "SReturn: type mismatch"
 -}
-genStmt (SReturn expr) = do
+genStmt stmt@(SReturn expr) = do
     (stmts, loc) <- genExpr expr
+    resultLoc <- lookupVar "_result"
+    writeln $ show stmt ++  " - result at " ++ show resultLoc
+    let stmts' = copyLocs resultLoc loc
+    pure (stmts ++ stmts')
+    {-
     case loc of
         LocStack i -> pure (stmts ++ [YulAssign ["_result"] (YulIdentifier (stkLoc i))])
         LocInt n -> pure (stmts ++ [YulAssign ["_result"] (YulLiteral (YulNumber (fromIntegral n)))])
         _ -> error "SReturn: type mismatch"
-genStmt (SBlock stmts) = yulStmts <$> genStmts stmts
+    -}
+genStmt (SBlock stmts) = genStmts stmts
 genStmt (SCase e alts) = do
     (stmts, loc) <- genExpr e
     case loc of
@@ -70,6 +103,33 @@ genStmt (SCase e alts) = do
                 yultag (LocBool b) = YulLiteral (if b then YulTrue else YulFalse)
                 yultag (LocInt n) = YulLiteral (YulNumber (fromIntegral n))
         _ -> error "SCase: type mismatch"
+
+genStmt (SFunction name args ret stmts) = do
+    let argTypes = map (\(TArg _ t) -> t) args
+    let info = FunInfo argTypes ret
+    insertFun name info
+    withLocalEnv do
+        yulArgs <- placeArgs args
+        yulResult <- placeResult ret
+        yulBody <- genStmts stmts
+        return [YulFun name yulArgs (YReturns yulResult) yulBody]
+    where
+        placeArgs :: [Arg] -> TM [YArg]
+        placeArgs = mapM placeArg
+        placeArg :: Arg -> TM YArg
+        placeArg (TArg name TInt) = do
+            n <- freshId
+            let loc = LocStack n
+            insertVar name loc
+            return (stkLoc n)
+        placeArg (TArg _ typ) = error("placeArg: not implemented for type" ++ show typ)
+        placeResult :: Type -> TM [YArg]
+        placeResult TInt = do
+            n <- freshId
+            let loc = LocStack n
+            insertVar "_result" loc
+            return [stkLoc n]
+
 genStmt e = error $ "genStmt unimplemented for: " ++ show e
 
 genAlts :: Location -> Location -> [Alt] -> TM [(YulLiteral, [YulStatement])]
@@ -82,7 +142,7 @@ genAlts locL locR [(Alt lname lstmt), (Alt rname rstmt)] = do
             insertVar name loc
             bstmts <- genStmt stmt
             pure bstmts
-
+genAlts _ _ _ = error "genAlts: invalid number of alternatives"
 
 coreAlloc :: Name -> Type -> TM [YulStatement]
 coreAlloc name typ = do
@@ -117,35 +177,44 @@ coreAssign :: Expr -> Expr -> TM [YulStatement]
 coreAssign lhs rhs = do
     (stmts1, locLhs) <- genExpr lhs
     (stmts2, locRhs) <- genExpr rhs
-    let stmts3 = copy locLhs locRhs
+    let stmts3 = copyLocs locLhs locRhs
     pure (stmts1 ++ stmts2 ++ stmts3)
-  where
-    load :: Location -> YulExpression
-    load (LocInt n) = YulLiteral (YulNumber (fromIntegral n))
-    load (LocBool b) = YulLiteral (if b then YulTrue else YulFalse)
-    load (LocStack i) = YulIdentifier (stkLoc i)
-    load loc = error("cannot load "++show loc)
-    copy :: Location -> Location -> [YulStatement]
-    copy (LocStack i) r@(LocInt _) = [YulAssign [stkLoc i] (load r)]
-    copy (LocStack i) r@(LocBool _) = [YulAssign [stkLoc i] (load r)]
-    copy (LocStack i) r@(LocStack _) = [YulAssign [stkLoc i] (load r)]
-    copy (LocStack _) LocUndefined = [YulComment "impossible"]
-    copy (LocPair l1 l2) (LocPair r1 r2) = copy l1 r1 ++ copy l2 r2
-    copy (LocSum ltag l1 l2) (LocSum rtag r1 r2) =  copy ltag rtag ++ (copySum rtag) where
-        copySum (LocBool b) = case b of
-            False -> copy l1 r1   -- explicit inl
-            True -> copy l2 r2    -- explicit inr
 
-        copySum (LocStack i) = [YulSwitch (YulIdentifier (stkLoc i))
-                    [ (YulNumber 0, copy l1 r1)
-                    , (YulNumber 1, copy l2 r2)
-                    ]
-                    Nothing]
-        copySum l = error("Invalid tag location: "++show l)
-    copy l r = error $ "copy: type mismatch - LHS: " ++ show l ++ " RHS: " ++ show r
+loadLoc :: Location -> YulExpression
+loadLoc (LocInt n) = YulLiteral (YulNumber (fromIntegral n))
+loadLoc (LocBool b) = YulLiteral (if b then YulTrue else YulFalse)
+loadLoc (LocStack i) = YulIdentifier (stkLoc i)
+loadLoc loc = error("cannot loadLoc "++show loc)
 
-genStmts :: [Stmt] -> TM Yul
-genStmts stmts = Yul . concat <$> mapM genStmtWithComment stmts
+-- copyLocs l r copies the value of r to l
+copyLocs :: Location -> Location -> [YulStatement]
+copyLocs (LocStack i) r@(LocInt _) = [YulAssign [stkLoc i] (loadLoc r)]
+copyLocs (LocStack i) r@(LocBool _) = [YulAssign [stkLoc i] (loadLoc r)]
+copyLocs (LocStack i) r@(LocStack _) = [YulAssign [stkLoc i] (loadLoc r)]
+copyLocs (LocStack _) LocUndefined = [YulComment "impossible"]
+copyLocs (LocPair l1 l2) (LocPair r1 r2) = copyLocs l1 r1 ++ copyLocs l2 r2
+copyLocs (LocSum ltag l1 l2) (LocSum rtag r1 r2) =  copyLocs ltag rtag ++ (copySum rtag) where
+    copySum (LocBool b) = case b of
+        False -> copyLocs l1 r1   -- explicit inl
+        True -> copyLocs l2 r2    -- explicit inr
+
+    copySum (LocStack i) = [YulSwitch (YulIdentifier (stkLoc i))
+                [ (YulNumber 0, copyLocs l1 r1)
+                , (YulNumber 1, copyLocs l2 r2)
+                ]
+                Nothing]
+    copySum l = error("Invalid tag location: "++show l)
+copyLocs l r = error $ "copy: type mismatch - LHS: " ++ show l ++ " RHS: " ++ show r
+
+genStmts :: [Stmt] -> TM [YulStatement]
+genStmts stmts = concat <$> mapM genStmtWithComment stmts
 
 translateCore :: Core -> TM Yul
-translateCore (Core stmts) = genStmts stmts
+translateCore (Core stmts) = do
+    -- assuming the result goes into `_mainresult`
+    n <- freshId
+    let prolog = [YulAlloc (stkLoc n)]
+    insertVar "_result" (LocStack n)
+    mainBody <- genStmts stmts
+    let epilog = [YulAssign ["_mainresult"] (YulIdentifier (stkLoc n))]
+    return $ Yul(prolog ++ mainBody ++ epilog )

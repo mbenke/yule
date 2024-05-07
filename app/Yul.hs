@@ -97,7 +97,7 @@ instance Pretty YulLiteral where
    assumes result is in a variable named "_result"
 -}
 wrapInSolFunction :: Pretty a => Name -> a -> Doc
-wrapInSolFunction name yul = text "function" <+> text name <+> prettyargs <+> text " public view returns (uint256 _result)" <+> lbrace
+wrapInSolFunction name yul = text "function" <+> text name <+> prettyargs <+> text " public view returns (uint256 _mainresult)" <+> lbrace
   $$ nest 2 assembly
   $$ rbrace
   where

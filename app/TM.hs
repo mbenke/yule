@@ -4,21 +4,28 @@ module TM
 , CEnv(..)
 --, module RIO
 , module Locus
+, FunInfo(..)
 , freshId
 , lookupVar
 , insertVar
-, getEnv
-, putEnv
+, lookupFun
+, insertFun
+, getVarEnv
+, putVarEnv
 , withLocalEnv
+, writeln
 ) where
 import RIO
 import qualified Data.Map as Map
 import Data.Map(Map)
 
 import Locus
+import qualified Core
 
 type VarEnv = Map String Location
-data CEnv = CEnv { env_counter :: IORef Int, env_vars :: IORef VarEnv }
+type FunEnv = Map String FunInfo
+data FunInfo = FunInfo { fun_args :: [Core.Type], fun_result :: Core.Type}
+data CEnv = CEnv { env_counter :: IORef Int, env_vars :: IORef VarEnv, env_funs :: IORef FunEnv }
 
 type TM a = RIO CEnv a
 
@@ -26,7 +33,8 @@ runTM :: TM a -> IO a
 runTM m = do
     counter <- newIORef 0
     vars <- newIORef Map.empty
-    runRIO m (CEnv counter vars)
+    funs <- newIORef Map.empty
+    runRIO m (CEnv counter vars funs)
 
 freshId :: TM Int
 freshId = do
@@ -37,7 +45,7 @@ freshId = do
 
 lookupVar :: String -> TM Location
 lookupVar x = do
-    vars <- getEnv
+    vars <- getVarEnv
     case Map.lookup x vars of
         Just n -> return n
         Nothing -> error ("Variable not found: " ++ x)
@@ -45,31 +53,41 @@ lookupVar x = do
 insertVar :: String -> Location -> TM ()
 insertVar x n = do
     vars <- reader env_vars
-    m <- load vars
-    store vars (Map.insert x n m)
+    update vars (Map.insert x n)
 
-{-
-addFreshVar :: String -> TM String
-addFreshVar x = do
-    n <- freshId
-    insertVar x n
-    let freshVar = ('v':show n)
-    info ["Adding fresh variable: ", x, " -> ", freshVar]
-    return freshVar
--}
-getEnv :: TM VarEnv
-getEnv = do
-    vars <- reader env_vars
-    load vars
+lookupFun :: String -> TM FunInfo
+lookupFun f = do
+    funs <- getFunEnv
+    case Map.lookup f funs of
+        Just n -> return n
+        Nothing -> error ("Function not found: " ++ f)
 
-putEnv :: VarEnv -> TM ()
-putEnv m = do
+insertFun :: String -> FunInfo -> TM ()
+insertFun f n = do
+    funs <- reader env_funs
+    update funs (Map.insert f n)
+
+getVarEnv :: TM VarEnv
+getVarEnv = load =<< reader env_vars
+
+putVarEnv :: VarEnv -> TM ()
+putVarEnv m = do
     vars <- reader env_vars
     store vars m
 
+getFunEnv :: TM FunEnv
+getFunEnv = load =<< reader env_funs
+
+putFunEnv :: FunEnv -> TM ()
+putFunEnv m = do
+    funs <- reader env_funs
+    store funs m
+
 withLocalEnv :: TM a -> TM a
 withLocalEnv m = do
-    vars <- getEnv
+    vars <- getVarEnv
+    funs <- getFunEnv
     x <- m
-    putEnv vars
+    putVarEnv vars
+    putFunEnv funs
     return x
