@@ -35,9 +35,8 @@ genExpr (ECall name args) = do
     (argCodes, argLocs) <- unzip <$> mapM genExpr args
     let argsCode = concat argCodes
     let yulArgs = flattenArgs argLocs
-    info <- lookupFun name
-    let resultType = fun_result info
-    (resultCode, resultLoc) <- allocResult resultType
+    funInfo <- lookupFun name
+    (resultCode, resultLoc) <- allocResult (fun_result funInfo)
     let callExpr = YulCall name yulArgs
     let callCode = [YulAssign (flattenRes resultLoc) callExpr]
     pure (argsCode++resultCode++callCode, resultLoc)
@@ -72,26 +71,13 @@ genStmt :: Stmt -> TM [YulStatement]
 genStmt (SAssembly stmts) = pure stmts
 genStmt (SAlloc name typ) = coreAlloc name typ
 genStmt (SAssign name expr) = coreAssign name expr
-{-
-genStmt (SReturn name) = do
-    loc <- lookupVar name
-    case loc of
-        LocStack i -> pure [YulAssign ["_result"] (YulIdentifier (stkLoc i))]
-        LocInt n -> pure [YulAssign ["_result"] (YulLiteral (YulNumber (fromIntegral n)))]
-        _ -> error "SReturn: type mismatch"
--}
-genStmt stmt@(SReturn expr) = do
+
+genStmt (SReturn expr) = do
     (stmts, loc) <- genExpr expr
     resultLoc <- lookupVar "_result"
-    writeln $ show stmt ++  " - result at " ++ show resultLoc
     let stmts' = copyLocs resultLoc loc
     pure (stmts ++ stmts')
-    {-
-    case loc of
-        LocStack i -> pure (stmts ++ [YulAssign ["_result"] (YulIdentifier (stkLoc i))])
-        LocInt n -> pure (stmts ++ [YulAssign ["_result"] (YulLiteral (YulNumber (fromIntegral n)))])
-        _ -> error "SReturn: type mismatch"
-    -}
+
 genStmt (SBlock stmts) = genStmts stmts
 genStmt (SCase e alts) = do
     (stmts, loc) <- genExpr e
