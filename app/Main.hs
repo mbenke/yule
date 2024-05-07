@@ -17,19 +17,19 @@ data Options = Options
 optionsParser :: Parser Options
 optionsParser = Options
     <$> argument str
-        ( metavar "FILE" 
+        ( metavar "FILE"
         <> help "Input file" )
     <*> strOption
         ( long "contract"
         <> short 'c'
         <> metavar "NAME"
-        <> help "Contract name" 
+        <> help "Contract name"
         <> value "Output")
     <*> strOption
         ( long "output"
         <> short 'o'
         <> metavar "FILE"
-        <> help "Output file" 
+        <> help "Output file"
         <> value "Output.sol")
     <*> switch
         ( long "verbose"
@@ -74,4 +74,3 @@ main9 = do
     let fooFun = wrapInSolFunction "main" generatedYul
     let doc = wrapInContract "Foo" "main()" fooFun
     putStrLn (render doc)
-

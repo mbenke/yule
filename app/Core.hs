@@ -38,7 +38,10 @@ data Stmt
     | SComment String
     | SBlock [Stmt]
     | SCase Expr [Alt]
+    | SFunction Name [Arg] Type [Stmt]
     -- deriving Show
+
+data Arg = TArg Name Type
 instance Show Stmt where show = render . pretty
 
 data Alt = Alt Name Stmt
@@ -76,6 +79,12 @@ instance Pretty Stmt where
     pretty (SCase e alts) =
         text "match" <+> pretty e <+> text "with" $$ lbrace
            $$ nest 2 (vcat (map pretty alts))  $$ rbrace
+    pretty (SFunction f args ret stmts) =
+        text "function" <+> text f <+> parens (hsep (punctuate comma (map pretty args))) <+> text "->" <+> pretty ret <+> lbrace
+           $$ nest 2 (vcat (map pretty stmts))  $$ rbrace
+
+instance Pretty Arg where
+    pretty (TArg n t) = text n <+> text ":" <+> pretty t
 
 instance Pretty Alt where
     pretty (Alt n s) = text n <+> text "=>" <+> pretty s

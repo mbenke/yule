@@ -64,8 +64,8 @@ pPrimaryExpr = choice
     , EBool True <$ pKeyword "true"
     , EBool False <$ pKeyword "false"
     , pTuple
+    , try (ECall <$> identifier <*> parens (commaSep coreExpr))
     , EVar <$> (identifier  <* notFollowedBy (symbol "("))
-    , ECall <$> identifier <*> parens (commaSep coreExpr)
     ]
 
 pTuple :: Parser Expr
@@ -91,9 +91,14 @@ coreStmt = choice
     , SReturn <$> (pKeyword "return" *> coreExpr)
     , SBlock <$> between (symbol "{") (symbol "}") (many coreStmt)
     , SCase <$> (pKeyword "match" *> coreExpr <* pKeyword "with") <*> (symbol "{" *> many coreAlt <* symbol "}")
+    , SFunction <$> (pKeyword "function" *> identifier) <*> (parens (commaSep coreArg)) <*> (symbol "->" *> coreType) 
+                <*> (symbol "{" *> many coreStmt <* symbol "}")
     , try (SAssign <$> (coreExpr <* symbol ":=") <*> coreExpr)
     , SExpr <$> coreExpr
     ]
+
+coreArg :: Parser Arg
+coreArg = TArg <$> identifier <*> (symbol ":" *> coreType)
 
 coreAlt :: Parser Alt  -- FIXME: distinguish inl/inr
 coreAlt = choice
