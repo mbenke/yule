@@ -61,6 +61,6 @@ parseOptions = execParser opts
   where
     opts = info (optionsParser <**> helper)
       ( fullDesc
-     <> progDesc "Print a greeting for TARGET"
-     <> header "hello - a test for optparse-applicative" )
+     <> progDesc "Compile a Core program to Yul"
+     <> header "yule - experiments with Yul codegen" )
 

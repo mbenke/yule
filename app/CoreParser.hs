@@ -78,7 +78,7 @@ pTuple = go <$> parens (commaSep coreExpr) where
 
 coreExpr :: Parser Expr
 coreExpr = choice 
-    [ pKeyword "inl" *> (EInr <$> pPrimaryExpr)
+    [ pKeyword "inl" *> (EInl <$> pPrimaryExpr)
     , pKeyword "inr" *> (EInr <$> pPrimaryExpr)
     , pKeyword "fst" *> (EFst <$> pPrimaryExpr)
     , pKeyword "snd" *> (ESnd <$> pPrimaryExpr)  
