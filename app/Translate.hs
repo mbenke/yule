@@ -1,5 +1,5 @@
 module Translate where
-
+import Data.List(union)
 import Core
 import TM
 import Yul
@@ -40,24 +40,24 @@ genExpr (ECall name args) = do
     let callExpr = YulCall name yulArgs
     let callCode = [YulAssign (flattenLhs resultLoc) callExpr]
     pure (argsCode++resultCode++callCode, resultLoc)
-genExpr e = error("genExpr: not implemented for "++show e)
+genExpr e = error ("genExpr: not implemented for "++show e)
 
 flattenRhs :: Location -> [YulExpression]
 flattenRhs (LocInt n) = [yulInt n]
 flattenRhs (LocBool b) = [yulBool b]
 flattenRhs (LocStack i) = [YulIdentifier (stkLoc i)]
 flattenRhs (LocPair l r) = flattenRhs l ++ flattenRhs r
-flattenRhs l = error("flattenRhs: not implemented for "++show l)
+flattenRhs l = error ("flattenRhs: not implemented for "++show l)
 
 flattenLhs :: Location -> [Name]
 flattenLhs (LocStack i) = [stkLoc i]
 flattenLhs (LocPair l r) = flattenLhs l ++ flattenLhs r
-flattenLhs l = error("flattenLhs: not implemented for "++show l)
+flattenLhs l = error ("flattenLhs: not implemented for "++show l)
 
 genStmtWithComment :: Stmt -> TM [YulStatement]
 genStmtWithComment (SComment c) = pure [YulComment c]
 genStmtWithComment s = do
-    let comment = YulComment(show s)
+    let comment = YulComment (show s)
     body <- genStmt s
     pure (comment : body)
 
@@ -82,7 +82,7 @@ genStmt (SCase e alts) = do
                 yultag (LocStack i) = YulIdentifier (stkLoc i)
                 yultag (LocBool b) = yulBool b
                 yultag (LocInt n) = yulInt n
-                yultag t = error("invalid tag: "++show t)
+                yultag t = error ("invalid tag: "++show t)
         _ -> error "SCase: type mismatch"
 
 genStmt (SFunction name args ret stmts) = do
@@ -109,15 +109,14 @@ genStmt (SFunction name args ret stmts) = do
 genStmt e = error $ "genStmt unimplemented for: " ++ show e
 
 genAlts :: Location -> Location -> [Alt] -> TM [(YulLiteral, [YulStatement])]
-genAlts locL locR [(Alt lname lstmt), (Alt rname rstmt)] = do
+genAlts locL locR [Alt lname lstmt, Alt rname rstmt] = do
     yulLStmts <- withName lname locL lstmt
     yulRStmts <- withName rname locR rstmt
     pure [(YulFalse, yulLStmts), (YulTrue, yulRStmts)]
     where
         withName name loc stmt = withLocalEnv do
             insertVar name loc
-            bstmts <- genStmt stmt
-            pure bstmts
+            genStmt stmt
 genAlts _ _ _ = error "genAlts: invalid number of alternatives"
 
 
@@ -135,32 +134,34 @@ buildLoc (TPair t1 t2) = do
     l2 <- buildLoc t2
     return (LocPair l1 l2)
 buildLoc (TSum t1 t2) = do
+    -- Make sum branches share stack slots
     tag <- LocStack <$> freshId
+    mark <- getCounter
     l1 <- buildLoc t1
+    leftMark <- getCounter
+    setCounter mark
     l2 <- buildLoc t2
+    rightMark <- getCounter
+    setCounter (max leftMark rightMark)
     return (LocSum tag l1 l2)
 buildLoc TUnit = pure LocUnit
-buildLoc t = error("cannot build location for "++show t)
+buildLoc t = error ("cannot build location for "++show t)
 
 coreAlloc :: Type -> TM ([YulStatement], Location)
 coreAlloc t = do
     loc <- buildLoc t
-    stmts <- allocLoc loc
+    let stmts = allocLoc loc
     pure (stmts, loc)
 
-allocLoc :: Location -> TM [YulStatement]
-allocLoc (LocStack i) = pure [YulAlloc (stkLoc i)]
-allocLoc (LocPair l r) = do
-    stmts1 <- allocLoc l
-    stmts2 <- allocLoc r
-    pure (stmts1 ++ stmts2)
-allocLoc (LocSum tag l r) = do
-    stmts0 <- allocLoc tag
-    stmts1 <- allocLoc l
-    stmts2 <- allocLoc r
-    pure (stmts0 ++ stmts1 ++ stmts2)
-allocLoc LocUnit = pure []
-allocLoc l = error("cannot allocate "++show l)
+stackSlots :: Location -> [Int]
+stackSlots (LocStack i) = [i]
+stackSlots (LocPair l r) = stackSlots l `union` stackSlots r
+stackSlots (LocSum tag l r) = stackSlots tag `union` stackSlots l `union` stackSlots r
+stackSlots _ = []
+
+allocLoc :: Location -> [YulStatement]
+allocLoc loc = [YulAlloc (stkLoc i) | i <- stackSlots loc]
+
 allocWord :: TM ([YulStatement], Location)
 allocWord = do
     n <- freshId
@@ -179,7 +180,7 @@ loadLoc :: Location -> YulExpression
 loadLoc (LocInt n) = YulLiteral (YulNumber (fromIntegral n))
 loadLoc (LocBool b) = YulLiteral (if b then YulTrue else YulFalse)
 loadLoc (LocStack i) = YulIdentifier (stkLoc i)
-loadLoc loc = error("cannot loadLoc "++show loc)
+loadLoc loc = error ("cannot loadLoc "++show loc)
 
 -- copyLocs l r copies the value of r to l
 copyLocs :: Location -> Location -> [YulStatement]
@@ -198,7 +199,7 @@ copyLocs (LocSum ltag l1 l2) (LocSum rtag r1 r2) =  copyLocs ltag rtag ++ (copyS
                 , (YulNumber 1, copyLocs l2 r2)
                 ]
                 Nothing]
-    copySum l = error("Invalid tag location: "++show l)
+    copySum l = error ("Invalid tag location: "++show l)
 copyLocs l r = error $ "copy: type mismatch - LHS: " ++ show l ++ " RHS: " ++ show r
 
 genStmts :: [Stmt] -> TM [YulStatement]
@@ -212,4 +213,4 @@ translateCore (Core stmts) = do
     insertVar "_result" (LocStack n)
     mainBody <- genStmts stmts
     let epilog = [YulAssign ["_mainresult"] (YulIdentifier (stkLoc n))]
-    return $ Yul(prolog ++ mainBody ++ epilog )
+    return $ Yul (prolog ++ mainBody ++ epilog )

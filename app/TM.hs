@@ -5,6 +5,8 @@ module TM
 --, module RIO
 , module Locus
 , FunInfo(..)
+, getCounter
+, setCounter
 , freshId
 , lookupVar
 , insertVar
@@ -35,6 +37,12 @@ runTM m = do
     vars <- newIORef Map.empty
     funs <- newIORef Map.empty
     runRIO m (CEnv counter vars funs)
+
+getCounter :: TM Int
+getCounter = reader env_counter >>= load
+
+setCounter :: Int -> TM ()
+setCounter n = reader env_counter >>= flip store n
 
 freshId :: TM Int
 freshId = do
