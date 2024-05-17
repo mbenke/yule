@@ -143,25 +143,26 @@ buildLoc TUnit = pure LocUnit
 buildLoc t = error("cannot build location for "++show t)
 
 coreAlloc :: Type -> TM ([YulStatement], Location)
-coreAlloc TInt = do
-    n <- freshId
-    let loc = LocStack n
-    pure ([YulAlloc (stkLoc n)], loc)
-coreAlloc TBool = allocBool
-coreAlloc (TPair t1 t2) = do
-    (stmts1, loc1) <- coreAlloc t1
-    (stmts2, loc2) <- coreAlloc t2
-    pure (stmts1 ++ stmts2, LocPair loc1 loc2)
-coreAlloc (TSum t1 t2) = do
-    (tagStmts, tagLoc) <- allocBool
-    (stmts1, loc1) <- coreAlloc t1
-    (stmts2, loc2) <- coreAlloc t2
-    pure (tagStmts ++ stmts1 ++ stmts2, LocSum tagLoc loc1 loc2)
-coreAlloc TUnit = pure ([], LocUnit)
-coreAlloc t = error("cannot allocate "++show t)
+coreAlloc t = do
+    loc <- buildLoc t
+    stmts <- allocLoc loc
+    pure (stmts, loc)
 
-allocBool :: TM ([YulStatement], Location)
-allocBool = do
+allocLoc :: Location -> TM [YulStatement]
+allocLoc (LocStack i) = pure [YulAlloc (stkLoc i)]
+allocLoc (LocPair l r) = do
+    stmts1 <- allocLoc l
+    stmts2 <- allocLoc r
+    pure (stmts1 ++ stmts2)
+allocLoc (LocSum tag l r) = do
+    stmts0 <- allocLoc tag
+    stmts1 <- allocLoc l
+    stmts2 <- allocLoc r
+    pure (stmts0 ++ stmts1 ++ stmts2)
+allocLoc LocUnit = pure []
+allocLoc l = error("cannot allocate "++show l)
+allocWord :: TM ([YulStatement], Location)
+allocWord = do
     n <- freshId
     let loc = LocStack n
     pure ([YulAlloc (stkLoc n)], loc)
